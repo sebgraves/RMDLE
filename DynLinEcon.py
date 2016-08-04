@@ -1,5 +1,5 @@
 """
-Filename: DynLinEcon2.py
+Filename: DynLinEcon.py
 Authors: Sebastian Graves
 Provides a class called DLE to convert and solve dynamic linear economics (as set out in Hansen & Sargent (2013)) as LQ problems.
 """
