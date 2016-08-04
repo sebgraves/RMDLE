@@ -17,7 +17,7 @@ class DLE(object):
 
     Section 5.5 of HS2013 describes how to map these matrices into those of a LQ problem. 
     
-    This class solves the associated LQ problem for such economies, and provides methods to find the non-stochastic steady state and simulate quantities and prices for the economy.
+    This class solves the associated LQ problem for such economies, and provides methods to: find the non-stochastic steady state, simulate quantities and prices, find impulse response functions, and create canonical preference representations.
     """
 
     def __init__(self, information, technology, preferences):
@@ -109,7 +109,7 @@ class DLE(object):
         self.Mc = -(self.thetah.T.dot(self.Mh) + self.pih.T.dot(self.Ms))
         self.Mi = -(self.thetak.T.dot(self.Mk))
 
-        #I made up the matrices for Mk and Mh but they seem to work. I also had to put a minus in front of everything to get same as the Matlab code
+        #I had to put a minus in front of everything to get same as the Matlab code
         
         """Find non-stochastic steady state of economy"""
     def compute_steadystate(self, nnc=2): #nnc is the position of the constant in the state vector
