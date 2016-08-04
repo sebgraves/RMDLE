@@ -1,6 +1,8 @@
 """
 Filename: DynLinEcon.py
-Authors: Sebastian Graves
+
+Author: Sebastian Graves
+
 Provides a class called DLE to convert and solve dynamic linear economics (as set out in Hansen & Sargent (2013)) as LQ problems.
 """
 
@@ -12,33 +14,37 @@ from pylab import array
 
 class DLE(object):
     """
-    This class is for analysing economies that are characterised by matrices defining information and shocks {a22, c2, ub, ud}, production technology {phic, phig, phii, gamma, 
-    deltak, thetak}, household technology {deltah, thetah, lambda, pih} and the scalar {beta}.
+    This class is for analysing economies that are characterised by matrices defining information and shocks {a22, c2, ub, ud}, 
+    production technology {phic, phig, phii, gamma, deltak, thetak},
+    household technology {deltah, thetah, lambda, pih},
+    and the scalar {beta}.
 
     Section 5.5 of HS2013 describes how to map these matrices into those of a LQ problem. 
     
-    This class solves the associated LQ problem for such economies, and provides methods to: find the non-stochastic steady state, simulate quantities and prices, find impulse response functions, and create canonical preference representations.
+    This class solves the associated LQ problem for such economies, and provides methods to: 
+    find the non-stochastic steady state,
+    simulate quantities and prices,
+    find impulse response functions,
+    and create canonical preference representations.
     """
 
     def __init__(self, information, technology, preferences):
 
+        # === Unpack the tuples which define information, technology and preferences === #
         self.a22, self.c2, self.ub, self.ud = information
         self.phic, self.phig, self.phii, self.gamma, self.deltak, self.thetak = technology
         self.beta, self.llambda, self.pih, self.deltah, self.thetah = preferences
         
-        """ Computation of the dimension of the structural parameter matrices """
-        
+        # === Computation of the dimension of the structural parameter matrices === #
         self.nb,self.nh = self.llambda.shape
         self.nd,self.nc = self.phic.shape
         self.nz,self.nw = self.c2.shape
         junk,self.ng = self.phig.shape
         self.nk,self.ni = self.thetak.shape
 
-        """ Creation of various useful matrices """
-
+        # === Creation of various useful matrices === #
         uc = np.hstack((np.eye(self.nc),np.zeros((self.nc,self.ng))))
         ug = np.hstack((np.zeros((self.ng,self.nc)),np.eye(self.ng)))
-
         phiin = np.linalg.inv(np.hstack((self.phic,self.phig)))
         phiinc = uc.dot(phiin)
         phiing = ug.dot(phiin)
@@ -46,26 +52,24 @@ class DLE(object):
         a1 = self.thetah.dot(phiinc).dot(self.gamma)
         a12 = np.vstack((self.thetah.dot(phiinc).dot(self.ud), np.zeros((self.nk,self.nz))))
 
-        """ Creation of the A Matrix for the state transition of the LQ problem"""
+        # === Creation of the A Matrix for the state transition of the LQ problem === #
 
         a11 = np.vstack((np.hstack((self.deltah,a1)), np.hstack((np.zeros((self.nk,self.nh)),self.deltak))))
         self.A = np.vstack((np.hstack((a11,a12)), np.hstack((np.zeros((self.nz,self.nk+self.nh)),self.a22))))
 
-        """ Creation of the B Matrix for the state transition of the LQ problem"""
+        # === Creation of the B Matrix for the state transition of the LQ problem === #
 
         b1 = np.vstack((b11,self.thetak))
         self.B = np.vstack((b1,np.zeros((self.nz,self.ni))))
 
-        """ Creation of the C Matrix for the state transition of the LQ problem"""
+        # === Creation of the C Matrix for the state transition of the LQ problem === #
 
         self.C = np.vstack((np.zeros((self.nk+self.nh,self.nw)),self.c2))
 
-        """ Define R,W and Q for the payoff function of the LQ problem """
+        # === Define R,W and Q for the payoff function of the LQ problem === #
 
         self.H = np.hstack((self.llambda,self.pih.dot(uc).dot(phiin).dot(self.gamma),self.pih.dot(uc).dot(phiin).dot(self.ud)-self.ub,-self.pih.dot(uc).dot(phiin).dot(self.phii)))
-
         self.G = ug.dot(phiin).dot(np.hstack((np.zeros((self.nd,self.nh)),self.gamma,self.ud,-self.phii)))
-
         self.S = (self.G.T.dot(self.G) + self.H.T.dot(self.H))/2
 
         self.nx = self.nh+self.nk+self.nz
@@ -75,13 +79,13 @@ class DLE(object):
         self.W = self.S[self.nx:self.n,0:self.nx]
         self.Q = self.S[self.nx:self.n,self.nx:self.n]
 
-        """ Use quantecon's LQ code to solve our LQ problem """
+        # === Use quantecon's LQ code to solve our LQ problem === #
 
         lq = LQ(self.Q, self.R, self.A, self.B, self.C, N=self.W, beta=self.beta)
 
         self.P, self.F, self.d = lq.stationary_values()
 
-        """ Construct output matrices for our economy using the solution to the LQ problem"""
+        # === Construct output matrices for our economy using the solution to the LQ problem === #
 
         self.A0 = self.A - self.B.dot(self.F)
 
@@ -95,12 +99,12 @@ class DLE(object):
         self.Sg = ug.dot(phiin).dot(-self.phii.dot(self.Si) + self.gamma.dot(self.Sk1) + self.Sd)
         self.Ss = self.llambda.dot(np.hstack((np.eye(self.nh),np.zeros((self.nh,self.nk+self.nz))))) + self.pih.dot(self.Sc)
 
-        """ Calculate eigenvalues of A0 """
+        # ===  Calculate eigenvalues of A0 === #
         self.A110 = self.A0[0:self.nh+self.nk,0:self.nh+self.nk]
         self.endo = np.linalg.eigvals(self.A110)
         self.exo = np.linalg.eigvals(self.a22)
 
-        """ Construct matrices for Lagrange Multipliers """
+        # === Construct matrices for Lagrange Multipliers === #
 
         self.Mk = -2*np.asscalar(self.beta)*(np.hstack((np.zeros((self.nk,self.nh)),np.eye(self.nk),np.zeros((self.nk,self.nz))))).dot(self.P).dot(self.A0)
         self.Mh = -2*np.asscalar(self.beta)*(np.hstack((np.eye(self.nh),np.zeros((self.nh,self.nk)),np.zeros((self.nh,self.nz))))).dot(self.P).dot(self.A0)
@@ -108,11 +112,10 @@ class DLE(object):
         self.Md = -(np.linalg.inv(np.vstack((self.phic.T,self.phig.T))).dot(np.vstack((self.thetah.T.dot(self.Mh) + self.pih.T.dot(self.Ms),-self.Sg))))
         self.Mc = -(self.thetah.T.dot(self.Mh) + self.pih.T.dot(self.Ms))
         self.Mi = -(self.thetak.T.dot(self.Mk))
-
-        #I had to put a minus in front of everything to get same as the Matlab code
+        #Note to check: I had to put a minus in front of everything to get same as the Matlab code
         
-        """Find non-stochastic steady state of economy"""
     def compute_steadystate(self, nnc=2): #nnc is the position of the constant in the state vector
+        """ Find non-stochastic steady-state of the economy """
         zx = Matrix(np.eye(self.A0.shape[0])-self.A0)
         self.zz = zx.nullspace()
         self.zz = array(self.zz)
@@ -126,8 +129,8 @@ class DLE(object):
         self.kss = self.Sk.dot(self.zz).astype(float)
         self.hss = self.Sh.dot(self.zz).astype(float)
 
-        """ Simulate quantities and prices for our economy """
     def compute_sequence(self, x0, ts_length=None, Pay=None):
+        """ Simulate quantities and prices for our economy """
         lq = LQ(self.Q, self.R, self.A, self.B, self.C, N=self.W, beta=self.beta)
         xp, up, wp = lq.compute_sequence(x0, ts_length)
         self.h = self.Sh.dot(xp)
@@ -139,8 +142,8 @@ class DLE(object):
         self.g = self.Sg.dot(xp)
         self.s = self.Ss.dot(xp)
 
-        """Value of J-period risk-free bonds"""
-        # See p.145: Equation (7.11.2)
+        # === Value of J-period risk-free bonds === #
+        # === See p.145: Equation (7.11.2) === #
         e1 = np.zeros((1,self.nc))
         e1[0,0] = 1
         self.R1_Price = np.empty((ts_length+1,1))
@@ -151,16 +154,16 @@ class DLE(object):
             self.R2_Price[i,0] = self.beta**2*e1.dot(self.Mc).dot(np.linalg.matrix_power(self.A0,2)).dot(xp[:,i])/e1.dot(self.Mc).dot(xp[:,i])
             self.R5_Price[i,0] = self.beta**5*e1.dot(self.Mc).dot(np.linalg.matrix_power(self.A0,5)).dot(xp[:,i])/e1.dot(self.Mc).dot(xp[:,i])
 
-        """Gross rates of return on 1-period risk-free bonds"""
+        # === Gross rates of return on 1-period risk-free bonds === #
         self.R1_Gross = 1/self.R1_Price
 
-        """Net rates of return on J-period risk-free bonds"""
-        # See p.148: log of gross rate of return, divided by j
+        # === Net rates of return on J-period risk-free bonds === #
+        # === See p.148: log of gross rate of return, divided by j === #
         self.R1_Net = np.log(1/self.R1_Price)/1
         self.R2_Net = np.log(1/self.R2_Price)/2
         self.R5_Net = np.log(1/self.R5_Price)/5
 
-        """Value of asset whose payout vector is Pay*xt"""
+        # === Value of asset whose payout vector is Pay*xt === #
         # See p.145: Equation (7.11.1)
         if isinstance(Pay,np.ndarray) == True:
             self.Za = Pay.T.dot(self.Mc)
@@ -175,8 +178,8 @@ class DLE(object):
                 self.Pay_Gross[i+1,0] = self.Pay_Price[i+1,0]/(self.Pay_Price[i,0] - Pay.dot(xp[:,i]))
         return
 
-        """ Create Impulse Response Functions """
     def irf(self, ts_length=100, shock=None):
+        """ Create Impulse Response Functions """
         
         if type(shock) != np.ndarray:
             shock = np.vstack((np.ones((1,1)),np.zeros((self.nw-1,1)))) #Default is to select first element of w
@@ -202,10 +205,12 @@ class DLE(object):
 
         return
 
-        """ Compute canonical preferences """
-        """ Uses auxiliary problem of 9.4.2, with the preference shock process reintroduced
-            Calculates pihat, llambdahat and ubhat for the equivalent canonical household technology """
     def canonical(self):
+        """ 
+        Compute canonical preference representation
+        Uses auxiliary problem of 9.4.2, with the preference shock process reintroduced
+        Calculates pihat, llambdahat and ubhat for the equivalent canonical household technology
+        """
         Ac1 = np.hstack((self.deltah,np.zeros((self.nh,self.nz))))
         Ac2 = np.hstack((np.zeros((self.nz,self.nh)),self.a22))
         Ac = np.vstack((Ac1,Ac2))
